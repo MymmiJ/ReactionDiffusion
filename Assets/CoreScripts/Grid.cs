@@ -5,7 +5,7 @@ public class Grid : MonoBehaviour {
 	public int width = 256;
 	public int height = 256;
 	private Texture2D texture;
-	//TODO: Refactor all into ints to test for faster performance, possibly offload it onto GPU
+	//TODO: Refactor all into ints to test for possibly faster performance on the CPU, or else possibly try to force Unity to offload flops onto GPU
 	public float dA = 1.0f;
 	public float dB = 0.5f;
 	public float f = 0.055f;
