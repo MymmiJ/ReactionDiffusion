@@ -1,6 +1,8 @@
 ﻿using System.Collections;
 using UnityEngine;
 
+[RequireComponent(typeof(MeshRenderer))]
+
 public class Grid : MonoBehaviour {
 	public int width = 256;
 	public int height = 256;
@@ -13,12 +15,33 @@ public class Grid : MonoBehaviour {
 	//TODO: Add new global array for nextCells, initialize and modify values instead
 	private Cell[,] cells;
 
+	//Needed for Raycasting/updating .b values on Ctrl+Click
+	public Camera cam;
+
+	//rotation variables begin
+	#region ROTATE
+	private float _sensitivity = 0.5f;
+	private Vector3 _mouseReference = Vector3.zero;
+	private Vector3 _mouseOffset;
+	private Vector3 _rotation = Vector3.zero;
+	private bool _isRotating;
+	#endregion
+	//rotation variables end
+
+	//raycast variables begin
+	private bool leftControl = false;
+	private int tempX = 0;
+	private int tempY = 0;
+	//raycast variables end
+
 	// Use this for initialization
 	void Start () {
 		//TODO: Update at run time to apply texture to whatever item is selected, transform item between solid primitives
 		initializeTexture ();
 
 		initializeCells ();
+
+		cam = Camera.main;
 	}
 	
 	// Update is called once per frame
@@ -26,6 +49,54 @@ public class Grid : MonoBehaviour {
 		reactDiffuse ();
 
 		refreshTexture ();
+
+
+		if (Input.GetKeyDown (KeyCode.LeftControl)) {
+			leftControl = true;
+		}
+
+		if (Input.GetKeyUp (KeyCode.LeftControl)) {
+			leftControl = false;
+		}
+
+		if (leftControl && _isRotating) {
+			RaycastHit hit;
+			if (!Physics.Raycast (cam.ScreenPointToRay (Input.mousePosition), out hit))
+				return;
+
+			Renderer rend = hit.transform.GetComponent<Renderer> ();
+			MeshCollider meshCollider = hit.collider as MeshCollider;
+
+			if (rend == null || rend.sharedMaterial == null || rend.sharedMaterial.mainTexture == null || meshCollider == null)
+				return;
+
+
+
+			Vector2 pixelUV = hit.textureCoord * width;
+			tempX = Mathf.FloorToInt (pixelUV.x);
+			tempY = Mathf.FloorToInt (pixelUV.y);
+
+			cells [tempX, tempY].b = 1f;
+			cells [tempX + 1, tempY].b = 1f;
+			cells [tempX, tempY + 1].b = 1f;
+			cells [tempX + 1, tempY + 1].b = 1f;
+
+			return;
+		}
+
+		if (_isRotating)
+		{
+			_mouseOffset = (Input.mousePosition - _mouseReference);
+
+			_rotation.y = -_mouseOffset.x * _sensitivity;
+			_rotation.x = _mouseOffset.y * _sensitivity;
+			//_rotation.z = -_mouseOffset.y * _sensitivity;
+
+			gameObject.transform.Rotate(_rotation);
+			_mouseReference = Input.mousePosition;
+
+			transform.eulerAngles += _rotation;
+		}
 	}
 	//TODO: click to create new 4x4 'seeds'
 	//TODO: add textures to Unity, use Color.lerp on loaded Texture colours instead of simply black/yellow.
@@ -132,5 +203,16 @@ public class Grid : MonoBehaviour {
 
 		return laPlaceB;
 	}
-	
+
+	void OnMouseDown()
+	{
+		_mouseReference = Input.mousePosition;
+
+		_isRotating = true;
+	}
+
+	void OnMouseUp()
+	{
+		_isRotating = false;
+	}
 }
