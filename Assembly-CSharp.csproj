@@ -48,6 +48,7 @@
   <ItemGroup>
      <Compile Include="Assets\CoreScripts\Cell.cs" />
      <Compile Include="Assets\CoreScripts\Grid.cs" />
+     <None Include="Assets\CoreScripts\ReactDiffuse.compute" />
  <Reference Include="UnityEngine.UI">
  <HintPath>D:/Unity3D/Editor/Data/UnityExtensions/Unity/GUISystem/UnityEngine.UI.dll</HintPath>
  </Reference>

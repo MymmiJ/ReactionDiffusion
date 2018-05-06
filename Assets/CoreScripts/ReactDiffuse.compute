@@ -1,0 +1,45 @@
+﻿#pragma kernel CSMain
+
+Texture2D<float4> prevTex;
+RWTexture2D<float4> currTex;
+uint texRes;
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	float aI = prevTex[id.xy].r;
+	float bI = prevTex[id.xy].b;
+
+	float dA = 1.0;
+	float dB = 0.5;
+	float f = 0.055;
+	float k = 0.062;
+
+	float laPlaceA = ((prevTex [uint2((id.x + 1 + texRes) % texRes, id.y)].r + prevTex [uint2((id.x - 1 + texRes) % texRes, id.y)].r
+					+ prevTex [uint2(id.x, (id.y + 1 + texRes) % texRes)].r + prevTex [uint2(id.x, (id.y - 1 + texRes) % texRes)].r) * 0.2)
+				+ ((prevTex [uint2((id.x - 1 + texRes) % texRes, (id.y - 1 + texRes) % texRes)].r + prevTex [uint2((id.x - 1 + texRes) % texRes, (id.y + 1 + texRes) % texRes)].r
+					+ prevTex [uint2((id.x + 1 + texRes) % texRes, (id.y - 1 + texRes) % texRes)].r + prevTex [uint2((id.x + 1 + texRes) % texRes, (id.y + 1 + texRes) % texRes)].r) * 0.05)
+				- aI;
+	float laPlaceB = ((prevTex [uint2((id.x + 1 + texRes) % texRes, id.y)].b + prevTex [uint2((id.x - 1 + texRes) % texRes, id.y)].b
+					+ prevTex [uint2(id.x, (id.y + 1 + texRes) % texRes)].b + prevTex [uint2(id.x, (id.y - 1 + texRes) % texRes)].b) * 0.2)
+					+ ((prevTex [uint2((id.x - 1 + texRes) % texRes, (id.y - 1 + texRes) % texRes)].b + prevTex [uint2((id.x - 1 + texRes) % texRes, (id.y + 1 + texRes) % texRes)].b
+					+ prevTex [uint2((id.x + 1 + texRes) % texRes, (id.y - 1 + texRes) % texRes)].b + prevTex [uint2((id.x + 1 + texRes) % texRes, (id.y + 1 + texRes) % texRes)].b) * 0.05)
+					- bI;
+
+	float nextA = aI + (dA * laPlaceA + (f * (1 - aI)) - (aI * bI * bI));
+	float nextB = bI + (dB * laPlaceB + (aI * bI * bI) - ((k + f) * bI));
+
+	currTex[id.xy] = float4(nextA,0,nextB,1);
+}
+
+#pragma kernel Initialize
+
+[numthreads(8,8,1)]
+void Initialize (uint3 id : SV_DispatchThreadID)
+{
+	float initialB = uint( (uint(id.xy.x % 2) + uint(100) == uint(id.xy.x)) && (uint(id.xy.y % 2) + uint(100) == uint(id.xy.y))
+						|| (uint(id.xy.x % 2) + uint(50) == uint(id.xy.x)) && (uint(id.xy.y % 2) + uint(100) == uint(id.xy.y))
+						|| (uint(id.xy.x % 2) + uint(30) == uint(id.xy.x)) && (uint(id.xy.y % 2) + uint(60) == uint(id.xy.y)) );
+
+	currTex[id.xy] = float4(1,0,initialB,1);
+}

@@ -4,8 +4,9 @@ using UnityEngine;
 [RequireComponent(typeof(MeshRenderer))]
 
 public class Grid : MonoBehaviour {
-	public int width = 256;
-	public int height = 256;
+	public static int textureResolution = 2048;
+	public int width = textureResolution;
+	public int height = textureResolution;
 	private Texture2D texture;
 	//TODO: Refactor all into ints to test for possibly faster performance on the CPU, or else possibly try to force Unity to offload flops onto GPU
 	public float dA = 1.0f;
@@ -14,6 +15,23 @@ public class Grid : MonoBehaviour {
 	public float k = 0.062f;
 	//TODO: Add new global array for nextCells, initialize and modify values instead
 	private Cell[,] cells;
+
+	//Shader code
+	public ComputeShader shader;
+	Renderer rend;
+	RenderTexture[] rt; //we need multiple render textures to avoid multiple copies per compute step
+	int currTex = 0;
+	const int numTex = 2;
+	//string consts prevent Unity recomputing strings
+	private const string CSMain = "CSMain";
+	private const string CurrTex = "currTex";
+	private const string CurrTexA = "currTexA";
+	private const string _MainTex = "_MainTex";
+	private const string PrevTexA = "prevTexA";
+	private const string PrevTex = "prevTex";
+	private const string TexRes = "texRes";
+	private const string Initialize = "Initialize";
+	//at this point I should really have made it an enum
 
 	//Needed for Raycasting/updating .b values on Ctrl+Click
 	public Camera cam;
@@ -37,7 +55,21 @@ public class Grid : MonoBehaviour {
 	// Use this for initialization
 	void Start () {
 		//TODO: Update at run time to apply texture to whatever item is selected, transform item between solid primitives
-		initializeTexture ();
+		rt = new RenderTexture[numTex];
+		for (int i = 0; i < numTex; ++i) {
+			rt[i] = new RenderTexture(width,height,24,RenderTextureFormat.ARGBFloat);
+			rt[i].enableRandomWrite = true;
+			//rt[i].wrapMode = TextureWrapMode.Clamp;
+			rt[i].Create ();
+		}
+
+
+		rend = GetComponent<Renderer> ();
+		rend.enabled = true;
+
+		initializeTextureInCompute ();
+
+		//initializeTexture ();
 
 		initializeCells ();
 
@@ -46,10 +78,11 @@ public class Grid : MonoBehaviour {
 	
 	// Update is called once per frame
 	void Update () {
-		reactDiffuse ();
+		//reactDiffuse ();
 
-		refreshTexture ();
+		//refreshTexture ();
 
+		updateTextureFromCompute ();
 
 		if (Input.GetKeyDown (KeyCode.LeftControl)) {
 			leftControl = true;
@@ -70,8 +103,6 @@ public class Grid : MonoBehaviour {
 			if (rend == null || rend.sharedMaterial == null || rend.sharedMaterial.mainTexture == null || meshCollider == null)
 				return;
 
-
-
 			Vector2 pixelUV = hit.textureCoord * width;
 			tempX = Mathf.FloorToInt (pixelUV.x);
 			tempY = Mathf.FloorToInt (pixelUV.y);
@@ -88,6 +119,7 @@ public class Grid : MonoBehaviour {
 		{
 			_mouseOffset = (Input.mousePosition - _mouseReference);
 
+			//_rotation.z = _mouseOffset.x * _sensitivity;
 			_rotation.y = -_mouseOffset.x * _sensitivity;
 			_rotation.x = _mouseOffset.y * _sensitivity;
 			//_rotation.z = -_mouseOffset.y * _sensitivity;
@@ -98,8 +130,7 @@ public class Grid : MonoBehaviour {
 			transform.eulerAngles += _rotation;
 		}
 	}
-	//TODO: click to create new 4x4 'seeds'
-	//TODO: add textures to Unity, use Color.lerp on loaded Texture colours instead of simply black/yellow.
+	//TODO: click to create new 4x4 'seeds' in shader
 	void initializeTexture ()
 	{
 		texture = new Texture2D (width, height);
@@ -113,6 +144,32 @@ public class Grid : MonoBehaviour {
 		texture.Apply ();
 	}
 
+	private void updateTextureFromCompute ()
+	{
+		int prevTex = currTex; //0-1
+		currTex = (currTex + 1) % numTex; //1-0
+
+		int kernelHandle = shader.FindKernel (CSMain);
+		shader.SetTexture (kernelHandle, PrevTex, rt [prevTex]);
+		shader.SetTexture (kernelHandle, CurrTex, rt [currTex]);
+		shader.Dispatch (kernelHandle, width >> 3, height >> 3, 1);
+
+		rend.material.SetTexture (_MainTex, rt[currTex]);
+	}
+
+	private void initializeTextureInCompute ()
+	{
+		int prevTex = currTex;
+		currTex = currTex + 1;
+
+		int kernelHandle = shader.FindKernel (Initialize);
+
+		shader.SetTexture (kernelHandle, CurrTex, rt[currTex]);
+		shader.Dispatch (kernelHandle, width >> 3, height >> 3, 1);
+
+		rend.material.SetTexture (_MainTex, rt[currTex]);
+	}
+	//CPU bound vvvv
 	void initializeCells ()
 	{
 		cells = new Cell[width, height];
@@ -156,8 +213,8 @@ public class Grid : MonoBehaviour {
 	{
 		Cell[,] nextCells = new Cell[width, height];
 
-		for (int x = 1; x < width - 1; ++x) {
-			for (int y = 1; y < height - 1; ++y) {
+		for (int x = 0; x < width; ++x) {
+			for (int y = 0; y < height; ++y) {
 				float a = cells [x, y].a;
 				float b = cells [x, y].b;
 
